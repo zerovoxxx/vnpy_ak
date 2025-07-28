@@ -1,0 +1,275 @@
+# Python单元测试规范
+
+## 基础规范
+- 严格遵守[Python开发基础规范](python.mdc)
+- 测试文件位置，单测文件夹下的子目录和原始包名保持一致（如果子目录不存在则创建）
+```plaintext
+├── tests/                         # 测试文件目录
+│   ├── integration_tests/         # 集成测试的目录
+│   ├── unit_tests/                # 单元测试的目录
+```
+- 使用pytest作为测试框架，充分利用其fixture、参数化测试、断言增强等特性
+- 测试文件命名必须以`test_`开头，后面跟上原始文件名 (如 test_utils.py)
+- 测试文件与被测文件保持同名 (如 utils.py → test_utils.py)
+- 测试函数命名必须以`test_`开头，后面跟上原始方法名
+- 测试类命名必须以`Test`开头，使用驼峰命名法
+- 每个测试用例必须有明确的测试目标，遵循AAA模式（Arrange-Act-Assert）
+- 测试代码应具备良好的可读性，通过函数名和文档字符串清晰表达测试意图
+- 优先使用pytest的内置断言，避免使用assert库的复杂断言
+
+## 强制行为
+- **测试文件组织规范**
+  - 测试文件必须放在`tests/`目录下，保持与源代码相同的目录结构
+  - 每个源代码模块都应有对应的测试文件
+  - 使用`conftest.py`文件定义共享的fixture和配置
+
+- **测试函数命名规范**
+  - 使用描述性的函数名，格式：`test_<功能>_<场景>_<预期结果>`
+  - 示例：`test_user_login_with_valid_credentials_should_return_success()`
+
+- **测试用例结构**
+  - 必须使用AAA模式组织测试代码
+  - Arrange（准备）：设置测试数据和环境
+  - Act（执行）：调用被测试的代码
+  - Assert（断言）：验证结果是否符合预期
+
+- **参数化测试**
+  - 对于多个输入场景，必须使用`@pytest.mark.parametrize`装饰器
+  - 参数化测试用例必须有清晰的参数标识符
+
+- **异常测试**
+  - 测试异常情况时必须使用`pytest.raises()`上下文管理器
+  - 验证异常类型和异常消息内容
+
+- **Fixture使用**
+  - 重复使用的测试数据必须定义为fixture
+  - fixture命名要清晰表达其用途
+  - 合理设置fixture的作用域（function、class、module、session）
+
+- **断言规范**
+  - 每个测试用例必须有明确的断言
+  - 使用pytest的增强断言，提供详细的失败信息
+  - 避免一个测试用例中有过多断言，保持单一职责
+
+## 禁止行为
+- **严禁使用print进行调试**，必须使用pytest的日志输出或断言信息
+- **禁止在测试中使用sleep()等时间等待**，使用mock或fixture模拟时间相关逻辑
+- **禁止测试用例之间有依赖关系**，每个测试必须独立运行
+- **禁止在测试中修改全局状态**，如环境变量、全局变量等，必须通过fixture或mock隔离
+- **禁止忽略测试失败**，不允许使用`pytest.skip()`掩盖问题
+- **禁止在单个测试用例中测试多个不相关的功能**
+- **禁止使用硬编码的绝对路径**，使用相对路径或临时目录
+- **禁止在测试中进行真实的外部调用**（网络请求、数据库操作等），必须使用mock
+- **禁止非确定性测试**，def test_random_behavior(): import random assert random.choice([True, False])  # 随机失败
+- **禁止未清理资源**，def test_file_operation(): f = open("/tmp/test.txt", "w")  # 未关闭/删除文件
+
+## 示例代码
+
+### 基础测试示例
+```python
+import pytest
+from myapp.calculator import Calculator
+
+
+class TestCalculator:
+    """计算器测试类"""
+    
+    def setup_method(self):
+        """每个测试方法执行前的准备工作"""
+        self.calculator = Calculator()
+    
+    def test_add_two_positive_numbers_should_return_sum(self):
+        """测试两个正数相加"""
+        # Arrange
+        a, b = 3, 5
+        expected = 8
+        
+        # Act
+        result = self.calculator.add(a, b)
+        
+        # Assert
+        assert result == expected
+    
+    def test_divide_by_zero_should_raise_zero_division_error(self):
+        """测试除零异常"""
+        # Arrange
+        a, b = 10, 0
+        
+        # Act & Assert
+        with pytest.raises(ZeroDivisionError, match="division by zero"):
+            self.calculator.divide(a, b)
+
+
+@pytest.mark.parametrize("a,b,expected", [
+    (2, 3, 5),
+    (-1, 1, 0),
+    (0, 5, 5),
+    (-2, -3, -5)
+])
+def test_add_various_numbers(a, b, expected):
+    """参数化测试加法运算"""
+    calculator = Calculator()
+    result = calculator.add(a, b)
+    assert result == expected
+```
+
+### Fixture使用示例
+```python
+import pytest
+from myapp.database import Database
+from myapp.user import User
+
+
+@pytest.fixture
+def sample_user():
+    """创建测试用户数据"""
+    return User(
+        id=1,
+        name="张三",
+        email="zhangsan@example.com",
+        age=25
+    )
+
+
+@pytest.fixture
+def mock_database(monkeypatch):
+    """模拟数据库连接"""
+    mock_db = Database()
+    # 使用monkeypatch模拟数据库操作
+    monkeypatch.setattr(mock_db, "connect", lambda: True)
+    monkeypatch.setattr(mock_db, "save", lambda user: user.id)
+    return mock_db
+
+
+def test_user_save_should_return_user_id(sample_user, mock_database):
+    """测试用户保存功能"""
+    # Act
+    user_id = mock_database.save(sample_user)
+    
+    # Assert
+    assert user_id == sample_user.id
+```
+
+### Mock使用示例
+```python
+import pytest
+from unittest.mock import Mock, patch
+from myapp.email_service import EmailService
+from myapp.notification import NotificationService
+
+
+def test_send_notification_should_call_email_service():
+    """测试通知服务调用邮件服务"""
+    # Arrange
+    mock_email_service = Mock(spec=EmailService)
+    notification_service = NotificationService(mock_email_service)
+    
+    message = "测试消息"
+    recipient = "user@example.com"
+    
+    # Act
+    notification_service.send_notification(recipient, message)
+    
+    # Assert
+    mock_email_service.send_email.assert_called_once_with(
+        to=recipient,
+        subject="通知",
+        body=message
+    )
+
+
+@patch('myapp.external_api.requests.get')
+def test_fetch_data_should_handle_api_response(mock_get):
+    """测试API调用处理"""
+    # Arrange
+    mock_response = Mock()
+    mock_response.json.return_value = {"status": "success", "data": []}
+    mock_response.status_code = 200
+    mock_get.return_value = mock_response
+    
+    from myapp.data_fetcher import DataFetcher
+    fetcher = DataFetcher()
+    
+    # Act
+    result = fetcher.fetch_user_data(user_id=123)
+    
+    # Assert
+    assert result["status"] == "success"
+    mock_get.assert_called_once_with(
+        "https://api.example.com/users/123",
+        timeout=30
+    )
+```
+
+### 异步测试示例
+```python
+import pytest
+import asyncio
+from myapp.async_service import AsyncService
+
+
+@pytest.mark.asyncio
+async def test_async_fetch_data_should_return_result():
+    """测试异步数据获取"""
+    # Arrange
+    service = AsyncService()
+    expected_data = {"id": 1, "name": "测试数据"}
+    
+    # Act
+    result = await service.fetch_data(data_id=1)
+    
+    # Assert
+    assert result == expected_data
+
+
+@pytest.fixture
+async def async_client():
+    """异步客户端fixture"""
+    from myapp.async_client import AsyncClient
+    client = AsyncClient()
+    await client.connect()
+    yield client
+    await client.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_async_client_operation(async_client):
+    """测试异步客户端操作"""
+    # Act
+    result = await async_client.perform_operation("test")
+    
+    # Assert
+    assert result.success is True
+```
+
+### 测试配置文件示例
+```python
+# conftest.py
+import pytest
+import tempfile
+import os
+from pathlib import Path
+
+
+@pytest.fixture(scope="session")
+def temp_dir():
+    """创建临时目录用于测试"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield Path(temp_dir)
+
+
+@pytest.fixture(autouse=True)
+def setup_test_environment(monkeypatch):
+    """自动设置测试环境"""
+    # 设置测试环境变量
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("DEBUG", "true")
+
+
+@pytest.fixture
+def capture_logs(caplog):
+    """捕获日志输出"""
+    import logging
+    caplog.set_level(logging.INFO)
+    return caplog
+```

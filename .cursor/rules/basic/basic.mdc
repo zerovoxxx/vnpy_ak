@@ -1,0 +1,130 @@
+---
+alwaysApply: true
+---
+# 项目基础规范（约束目录结构、技术栈、开发流程）
+
+## 基础规范
+- 项目目录结构如下：
+```plaintext
+vnpy/
+├── .cursor/                        # Cursor编辑器配置目录
+├── docs/                          # 项目文档（此目录及子文件禁止修改）
+│   ├── _static/                   # 静态文件
+│   ├── _templates/                # 文档模板
+│   ├── community/                 # 社区版文档
+│   ├── elite/                     # 精英版文档
+│   ├── conf.py                    # Sphinx配置文件
+│   └── index.rst                  # 文档主页
+├── examples/                      # 示例代码（此目录及子文件禁止修改）
+│   ├── alpha_research/            # Alpha研究示例
+│   ├── candle_chart/              # K线图示例
+│   ├── client_server/             # 客户端服务器示例
+│   ├── cta_backtesting/           # CTA回测示例
+│   ├── data_recorder/             # 数据记录示例
+│   ├── download_bars/             # 下载K线数据示例
+│   ├── no_ui/                     # 无界面示例
+│   ├── notebook_trading/          # Jupyter交易示例
+│   ├── portfolio_backtesting/     # 投资组合回测示例
+│   ├── simple_rpc/                # 简单RPC示例
+│   ├── spread_backtesting/        # 价差回测示例
+│   └── veighna_trader/            # VeighNa交易示例
+├── dataloader/                    # 数据加载器
+├── signalpush/                    # 交易信号消息PUSH
+├── tests/                         # 测试文件目录
+│   ├── integration_tests/         # 集成测试的目录
+│   ├── unit_tests/                # 单元测试的目录
+├── vnpy/                         # vnpy核心包（此目录及子文件禁止修改）
+│   ├── __init__.py               # 包初始化文件
+│   ├── alpha/                    # Alpha因子模块
+│   │   ├── __init__.py
+│   │   ├── dataset/              # 数据集模块
+│   │   │   ├── __init__.py
+│   │   │   ├── cs_function.py    # 截面函数
+│   │   │   ├── datasets/         # 数据集实现
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── alpha_158.py  # Alpha158数据集
+│   │   │   ├── processor.py      # 数据处理器
+│   │   │   ├── ta_function.py    # 技术分析函数
+│   │   │   ├── template.py       # 模板
+│   │   │   ├── ts_function.py    # 时间序列函数
+│   │   │   └── utility.py        # 工具函数
+│   │   ├── lab.py                # Alpha实验室
+│   │   ├── logger.py             # 日志模块
+│   │   ├── model/                # 模型模块
+│   │   │   ├── __init__.py
+│   │   │   ├── models/           # 模型实现
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── lasso_model.py # Lasso回归模型
+│   │   │   │   ├── lgb_model.py   # LightGBM模型
+│   │   │   │   └── mlp_model.py   # MLP神经网络模型
+│   │   │   └── template.py       # 模型模板
+│   │   └── strategy/             # 策略模块
+│   │       ├── __init__.py
+│   │       ├── backtesting.py    # 回测引擎
+│   │       ├── strategies/       # 策略实现
+│   │       │   ├── __init__.py
+│   │       │   └── equity_demo_strategy.py # 股票示例策略
+│   │       └── template.py       # 策略模板
+│   ├── chart/                    # 图表模块
+│   │   ├── __init__.py
+│   │   ├── axis.py               # 坐标轴
+│   │   ├── base.py               # 基础类
+│   │   ├── item.py               # 图表项
+│   │   ├── manager.py            # 图表管理器
+│   │   └── widget.py             # 图表控件
+│   ├── event/                    # 事件模块
+│   │   ├── __init__.py
+│   │   └── engine.py             # 事件引擎
+│   ├── rpc/                      # RPC模块
+│   │   ├── __init__.py
+│   │   ├── client.py             # RPC客户端
+│   │   ├── common.py             # 公共模块
+│   │   └── server.py             # RPC服务器
+│   └── trader/                   # 交易核心模块
+│       ├── __init__.py
+│       ├── app.py                # 应用管理
+│       ├── constant.py           # 常量定义
+│       ├── converter.py          # 数据转换器
+│       ├── database.py           # 数据库接口
+│       ├── datafeed.py           # 数据源接口
+│       ├── engine.py             # 主引擎
+│       ├── event.py              # 事件类型定义
+│       ├── gateway.py            # 交易接口基类
+│       ├── locale/               # 国际化
+│       │   ├── __init__.py
+│       │   ├── build_hook.py     # 构建钩子
+│       │   ├── en/               # 英文翻译
+│       │   │   └── LC_MESSAGES/
+│       │   │       └── vnpy.po
+│       │   ├── generate_mo.bat   # 生成mo文件
+│       │   ├── generate_pot.bat  # 生成pot文件
+│       │   └── vnpy.pot          # 翻译模板
+│       ├── logger.py             # 日志模块
+│       ├── object.py             # 数据对象定义
+│       ├── optimize.py           # 参数优化
+│       ├── setting.py            # 设置管理
+│       ├── ui/                   # 用户界面
+│       │   ├── __init__.py
+│       │   ├── ico/              # 图标资源
+│       │   │   └── (各种.ico图标文件)
+│       │   ├── mainwindow.py     # 主窗口
+│       │   ├── qt.py             # Qt封装
+│       │   └── widget.py         # 控件
+│       └── utility.py            # 工具函数
+├── .gitignore                    # Git忽略文件
+├── CHANGELOG.md                  # 变更日志
+├── LICENSE                       # 许可证
+├── README.md                     # 中文说明文档
+├── README_ENG.md                 # 英文说明文档
+├── pyproject.toml               # Python项目配置
+├── install.bat                  # Windows安装脚本
+├── install.sh                   # Linux安装脚本
+└── install_osx.sh               # macOS安装脚本
+```
+
+## 强制行为
+- 任何新特性请先查看目录结构，找到和特性最适合的代码目录
+
+## 禁止行为  
+- 严格禁止修改项目的一级和二级目录结构
+- docs/、examples/、vnpy/所有目录包括其子目录及子文件均禁止修改
