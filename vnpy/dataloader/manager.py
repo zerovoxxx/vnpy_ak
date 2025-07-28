@@ -176,39 +176,6 @@ class StockDataManager:
                 
         return results
         
-    def get_downloader_info(self, source: DataSource) -> Dict:
-        """
-        获取下载器信息
-        
-        Args:
-            source: 数据源
-            
-        Returns:
-            Dict: 下载器信息
-        """
-        if source not in self.downloaders:
-            return {}
-            
-        downloader = self.downloaders[source]
-        return {
-            "name": downloader.name,
-            "source": downloader.source.value,
-            "supported_intervals": [interval.value for interval in downloader.get_supported_intervals()],
-            "supported_exchanges": [exchange.value for exchange in downloader.get_supported_exchanges()]
-        }
-        
-    def list_all_downloaders(self) -> Dict[str, Dict]:
-        """
-        列出所有可用的下载器信息
-        
-        Returns:
-            Dict[str, Dict]: 所有下载器信息
-        """
-        info = {}
-        for source in DataSource:
-            info[source.value] = self.get_downloader_info(source)
-        return info
-        
     def validate_download_request(self, 
                                  symbol: str,
                                  source: DataSource,
@@ -240,24 +207,6 @@ class StockDataManager:
             return False, f"数据源 {source.value} 不支持时间间隔 {interval.value}"
             
         return True, ""
-        
-    def get_database_overview(self) -> List:
-        """
-        获取数据库中的数据概览
-        
-        Returns:
-            List: 数据概览
-        """
-        if not self.database:
-            self.init_database()
-            
-        if self.database:
-            try:
-                return self.database.get_bar_overview()
-            except Exception as e:
-                print(f"获取数据库概览失败: {e}")
-                
-        return []
         
     def delete_stock_data(self, symbol: str, exchange: Exchange, interval: Interval) -> bool:
         """

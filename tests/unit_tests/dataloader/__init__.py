@@ -1,5 +1,5 @@
 """
-dataloader单元测试模块
+dataloader模块单元测试包
 
-包含dataloader模块的所有单元测试
+包含dataloader模块中所有组件的单元测试。
 """ 

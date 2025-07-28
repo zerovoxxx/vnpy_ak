@@ -55,6 +55,7 @@ alwaysApply: true
   - 类 (Class): 使用首字母大写的驼峰命名法 (PascalCase)。示例: class MyCar
   - 常量 (Constant): 使用全部大写的字母，单词间用下划线 _ 连接。示例: MAX_CONNECTIONS = 100
   - 模块 (Module) 和包 (Package): 使用简短、全小写的名字，可使用下划线。示例: my_module.py
+  - 如果一个文件下仅有一个类，尽量保持文件名和类名相同。示例: class MyCar，文件名：my_car.py
 - 代码格式化规范
   - 缩进 (Indentation)必须使用 4 个空格作为一级缩进。
   - 建议每行代码不超过 79 个字符。

@@ -28,12 +28,10 @@ vnpy/
 │   ├── simple_rpc/                # 简单RPC示例
 │   ├── spread_backtesting/        # 价差回测示例
 │   └── veighna_trader/            # VeighNa交易示例
-├── dataloader/                    # 数据加载器
-├── signalpush/                    # 交易信号消息PUSH
 ├── tests/                         # 测试文件目录
 │   ├── integration_tests/         # 集成测试的目录
 │   ├── unit_tests/                # 单元测试的目录
-├── vnpy/                         # vnpy核心包（此目录及子文件禁止修改）
+├── vnpy/                         # vnpy核心包
 │   ├── __init__.py               # 包初始化文件
 │   ├── alpha/                    # Alpha因子模块
 │   │   ├── __init__.py
@@ -80,6 +78,8 @@ vnpy/
 │   │   ├── client.py             # RPC客户端
 │   │   ├── common.py             # 公共模块
 │   │   └── server.py             # RPC服务器
+│   ├── dataloader/               # 行情数据下载和处理
+│   ├── message/                  # 交易信号消息PUSH
 │   └── trader/                   # 交易核心模块
 │       ├── __init__.py
 │       ├── app.py                # 应用管理
@@ -128,3 +128,4 @@ vnpy/
 ## 禁止行为  
 - 严格禁止修改项目的一级和二级目录结构
 - docs/、examples/、vnpy/所有目录包括其子目录及子文件均禁止修改
+- vnpy/目录下的子目录dataloader/和message/允许修改，其余子目录及子文件均禁止修改

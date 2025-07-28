@@ -48,7 +48,7 @@ dataloader/
 ```python
 from datetime import datetime, timedelta
 from vnpy.trader.constant import Exchange, Interval
-from dataloader import StockDataManager, DataSource
+from vnpy.dataloader import StockDataManager, DataSource
 
 # 创建数据管理器
 manager = StockDataManager()

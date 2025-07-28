@@ -1,385 +1,453 @@
 """
-yfinance_downloader.py模块的单元测试
+YfinanceStockDownloader单元测试
 
-测试YfinanceStockDownloader类的所有功能方法
+测试基于yfinance的股票数据下载器的所有功能。
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
 import pandas as pd
-import pytz
 
-from vnpy.trader.constant import Exchange, Interval
 from vnpy.trader.object import BarData
-
-from dataloader.base import DataSource, DownloadRequest, DownloadResult
-from dataloader.yfinance_downloader import YfinanceStockDownloader
+from vnpy.trader.constant import Exchange, Interval
+from vnpy.dataloader.base import DownloadRequest, DownloadResult, DataSource
+from vnpy.dataloader.yfinance_downloader import YfinanceStockDownloader
 
 
 class TestYfinanceStockDownloader:
-    """测试YfinanceStockDownloader类"""
-    
-    def test_yfinance_downloader_initialization(self):
-        """测试yfinance下载器初始化"""
-        # Act
-        downloader = YfinanceStockDownloader()
-        
+    """YfinanceStockDownloader测试类"""
+
+    def setup_method(self):
+        """每个测试方法执行前的准备工作"""
+        self.downloader = YfinanceStockDownloader()
+
+    def test_init_should_create_instance_with_correct_attributes(self):
+        """测试初始化应该创建具有正确属性的实例"""
         # Assert
-        assert downloader.name == "YfinanceStockDownloader"
-        assert downloader.source == DataSource.YFINANCE
-        assert downloader.yf is None
-        
-    @patch('dataloader.yfinance_downloader.yfinance')
-    def test_init_connection_success(self, mock_yf):
-        """测试yfinance连接初始化成功"""
+        assert self.downloader.name == "YfinanceStockDownloader"
+        assert self.downloader.source == DataSource.YFINANCE
+        assert self.downloader.yf is None
+
+    def test_init_connection_with_yfinance_available_should_return_true(self):
+        """测试yfinance可用时初始化连接应该返回True"""
         # Arrange
-        downloader = YfinanceStockDownloader()
+        mock_yf = Mock()
         
-        # Act
-        result = downloader.init_connection()
-        
-        # Assert
+        # Act & Assert
+        with patch.dict('sys.modules', {'yfinance': mock_yf}):
+            result = self.downloader.init_connection()
+                
         assert result is True
-        assert downloader.yf == mock_yf
-        
-    @patch('dataloader.yfinance_downloader.yfinance', side_effect=ImportError())
-    def test_init_connection_import_error(self, mock_yf):
-        """测试yfinance库未安装的情况"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        result = downloader.init_connection()
-        
-        # Assert
+        assert self.downloader.yf is not None
+
+    def test_init_connection_with_yfinance_not_available_should_return_false(self):
+        """测试yfinance不可用时初始化连接应该返回False"""
+        # Act & Assert
+        with patch('builtins.__import__', side_effect=ImportError("No module named 'yfinance'")):
+            result = self.downloader.init_connection()
+            
         assert result is False
-        assert downloader.yf is None
-        
-    @patch('dataloader.yfinance_downloader.yfinance', side_effect=Exception("初始化失败"))
-    def test_init_connection_general_error(self, mock_yf):
-        """测试yfinance初始化一般错误"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        result = downloader.init_connection()
-        
-        # Assert
+        assert self.downloader.yf is None
+
+    def test_init_connection_with_exception_should_return_false(self):
+        """测试初始化连接遇到异常时应该返回False"""
+        # Act & Assert
+        with patch('builtins.__import__', side_effect=Exception("Unknown error")):
+            result = self.downloader.init_connection()
+            
         assert result is False
-        assert downloader.yf is None
-        
-    def test_convert_interval_to_yf(self):
-        """测试时间间隔转换为yfinance格式"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act & Assert
-        assert downloader._convert_interval_to_yf(Interval.MINUTE) == "1m"
-        assert downloader._convert_interval_to_yf(Interval.HOUR) == "1h"
-        assert downloader._convert_interval_to_yf(Interval.DAILY) == "1d"
-        
-    def test_convert_interval_to_yf_unknown(self):
-        """测试未知时间间隔转换"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        result = downloader._convert_interval_to_yf(Interval.WEEKLY)
-        
-        # Assert
-        assert result == "1d"  # 默认返回日线
-        
-    def test_convert_exchange_to_yf_suffix(self):
-        """测试交易所转换为yfinance后缀"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act & Assert
-        # 美股通常不需要后缀
-        assert downloader._convert_exchange_to_yf_suffix(Exchange.NYSE) == ""
-        assert downloader._convert_exchange_to_yf_suffix(Exchange.NASDAQ) == ""
-        assert downloader._convert_exchange_to_yf_suffix(Exchange.AMEX) == ""
-        
-    def test_convert_yf_data_to_vnpy_empty_data(self):
-        """测试空DataFrame转换"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        empty_df = pd.DataFrame()
-        
-        # Act
-        bars = downloader._convert_yf_data_to_vnpy(
-            empty_df, "AAPL", Exchange.NYSE, Interval.DAILY
-        )
-        
-        # Assert
-        assert bars == []
-        
-    def test_convert_yf_data_to_vnpy_none_data(self):
-        """测试None数据转换"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        bars = downloader._convert_yf_data_to_vnpy(
-            None, "AAPL", Exchange.NYSE, Interval.DAILY
-        )
-        
-        # Assert
-        assert bars == []
-        
-    def test_convert_yf_data_to_vnpy_valid_data(self, mock_yfinance_ticker):
-        """测试有效yfinance数据转换"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # 创建带时区的测试数据
-        test_data = {
-            'Open': [150.0, 151.0, 152.0],
-            'High': [155.0, 156.0, 157.0],
-            'Low': [149.0, 150.0, 151.0],
-            'Close': [152.0, 153.0, 154.0],
-            'Volume': [1000000, 1100000, 1200000]
-        }
-        
-        # 创建带时区的时间索引
-        dates = pd.date_range('2023-01-01', periods=3, freq='D', tz='UTC')
-        df = pd.DataFrame(test_data, index=dates)
-        
-        # Act
-        bars = downloader._convert_yf_data_to_vnpy(
-            df, "AAPL", Exchange.NYSE, Interval.DAILY
-        )
-        
-        # Assert
-        assert len(bars) == 3
-        assert all(isinstance(bar, BarData) for bar in bars)
-        assert bars[0].symbol == "AAPL"
-        assert bars[0].exchange == Exchange.NYSE
-        assert bars[0].interval == Interval.DAILY
-        assert bars[0].open_price == 150.0
-        assert bars[0].gateway_name == "yfinance"
-        
-    def test_convert_yf_data_to_vnpy_no_timezone(self):
-        """测试无时区的yfinance数据转换"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        test_data = {
-            'Open': [150.0],
-            'High': [155.0],
-            'Low': [149.0],
-            'Close': [152.0],
-            'Volume': [1000000]
-        }
-        
-        # 创建无时区的时间索引
-        dates = pd.date_range('2023-01-01', periods=1, freq='D')
-        df = pd.DataFrame(test_data, index=dates)
-        
-        # Act
-        bars = downloader._convert_yf_data_to_vnpy(
-            df, "AAPL", Exchange.NYSE, Interval.DAILY
-        )
-        
-        # Assert
-        assert len(bars) == 1
-        assert bars[0].symbol == "AAPL"
-        
-    def test_download_bars_not_initialized(self, sample_download_request):
-        """测试yfinance未初始化时下载数据"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        result = downloader.download_bars(sample_download_request)
-        
-        # Assert
-        assert result.success is False
-        assert "yfinance未初始化" in result.error_msg
-        
-    def test_download_bars_invalid_request(self):
-        """测试无效请求下载数据"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        downloader.yf = Mock()
-        
-        invalid_request = DownloadRequest(
-            symbol="",  # 空股票代码
-            exchange=Exchange.NYSE
-        )
-        
-        # Act
-        result = downloader.download_bars(invalid_request)
-        
-        # Assert
-        assert result.success is False
-        assert "股票代码不能为空" in result.error_msg
-        
-    @patch('dataloader.yfinance_downloader.yfinance')
-    def test_download_bars_success(self, mock_yf, sample_download_request, mock_yfinance_ticker):
-        """测试成功下载数据"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        downloader.yf = mock_yf
-        mock_yf.Ticker.return_value = mock_yfinance_ticker
-        
-        # Act
-        result = downloader.download_bars(sample_download_request)
-        
-        # Assert
-        assert result.success is True
-        assert len(result.bars) > 0
-        mock_yf.Ticker.assert_called_once_with("AAPL")
-        mock_yfinance_ticker.history.assert_called_once()
-        
-    @patch('dataloader.yfinance_downloader.yfinance')
-    def test_download_bars_with_suffix(self, mock_yf, mock_yfinance_ticker):
-        """测试带后缀的股票代码下载"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        downloader.yf = mock_yf
-        mock_yf.Ticker.return_value = mock_yfinance_ticker
-        
-        # 重写方法返回后缀
-        downloader._convert_exchange_to_yf_suffix = Mock(return_value=".L")
-        
-        request = DownloadRequest(symbol="AAPL", exchange=Exchange.NYSE)
-        
-        # Act
-        result = downloader.download_bars(request)
-        
-        # Assert
-        mock_yf.Ticker.assert_called_once_with("AAPL.L")
-        
-    @patch('dataloader.yfinance_downloader.yfinance')
-    def test_download_bars_empty_result(self, mock_yf, sample_download_request):
-        """测试下载空结果"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        downloader.yf = mock_yf
-        
-        mock_ticker = Mock()
-        mock_ticker.history.return_value = pd.DataFrame()  # 空DataFrame
-        mock_yf.Ticker.return_value = mock_ticker
-        
-        # Act
-        result = downloader.download_bars(sample_download_request)
-        
-        # Assert
-        assert result.success is False
-        assert "未获取到数据" in result.error_msg
-        
-    @patch('dataloader.yfinance_downloader.yfinance')
-    def test_download_bars_exception(self, mock_yf, sample_download_request):
-        """测试下载过程中发生异常"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        downloader.yf = mock_yf
-        
-        mock_yf.Ticker.side_effect = Exception("网络错误")
-        
-        # Act
-        result = downloader.download_bars(sample_download_request)
-        
-        # Assert
-        assert result.success is False
-        assert "yfinance数据下载失败" in result.error_msg
-        assert "网络错误" in result.error_msg
-        
-    def test_get_supported_intervals(self):
-        """测试获取支持的时间间隔"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        intervals = downloader.get_supported_intervals()
-        
-        # Assert
-        assert Interval.MINUTE in intervals
-        assert Interval.HOUR in intervals
-        assert Interval.DAILY in intervals
-        assert len(intervals) == 3
-        
-    def test_is_support_interval(self):
-        """测试时间间隔支持检查"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act & Assert
-        assert downloader.is_support_interval(Interval.MINUTE) is True
-        assert downloader.is_support_interval(Interval.HOUR) is True
-        assert downloader.is_support_interval(Interval.DAILY) is True
-        assert downloader.is_support_interval(Interval.WEEKLY) is False
-        
-    def test_get_supported_exchanges(self):
-        """测试获取支持的交易所"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
-        # Act
-        exchanges = downloader.get_supported_exchanges()
-        
-        # Assert
-        assert Exchange.NYSE in exchanges
-        assert Exchange.NASDAQ in exchanges
-        assert Exchange.AMEX in exchanges
-        assert Exchange.SMART in exchanges
-        assert len(exchanges) == 4
-        
+        assert self.downloader.yf is None
+
     @pytest.mark.parametrize("interval,expected", [
         (Interval.MINUTE, "1m"),
         (Interval.HOUR, "1h"),
         (Interval.DAILY, "1d"),
     ])
-    def test_convert_interval_parametrized(self, interval, expected):
-        """参数化测试时间间隔转换"""
-        # Arrange
-        downloader = YfinanceStockDownloader()
-        
+    def test_convert_interval_to_yf_should_return_correct_format(self, interval, expected):
+        """测试时间间隔转换应该返回正确格式"""
         # Act
-        result = downloader._convert_interval_to_yf(interval)
+        result = self.downloader._convert_interval_to_yf(interval)
         
         # Assert
         assert result == expected
-        
-    @pytest.mark.parametrize("exchange", [Exchange.NYSE, Exchange.NASDAQ, Exchange.AMEX, Exchange.SMART])
-    def test_supported_exchanges_parametrized(self, exchange):
-        """参数化测试支持的交易所"""
+
+    def test_convert_interval_to_yf_with_unsupported_interval_should_return_default(self):
+        """测试不支持的时间间隔转换应该返回默认值"""
         # Arrange
-        downloader = YfinanceStockDownloader()
+        unsupported_interval = Mock()
         
         # Act
-        exchanges = downloader.get_supported_exchanges()
+        result = self.downloader._convert_interval_to_yf(unsupported_interval)
         
         # Assert
-        assert exchange in exchanges
+        assert result == "1d"
+
+    @pytest.mark.parametrize("exchange,expected", [
+        (Exchange.NYSE, ""),
+        (Exchange.NASDAQ, ""),
+        (Exchange.AMEX, ""),
+        (Exchange.SMART, ""),
+    ])
+    def test_convert_exchange_to_yf_suffix_should_return_empty_string(self, exchange, expected):
+        """测试交易所转换应该返回空字符串（美股不需要后缀）"""
+        # Act
+        result = self.downloader._convert_exchange_to_yf_suffix(exchange)
         
-    @patch('dataloader.yfinance_downloader.yfinance')
-    def test_download_bars_history_parameters(self, mock_yf, mock_yfinance_ticker):
-        """测试历史数据请求参数"""
+        # Assert
+        assert result == expected
+
+    def test_convert_yf_data_to_vnpy_with_valid_data_should_return_bar_list(self, mock_yfinance_data):
+        """测试有效数据转换应该返回BarData列表"""
         # Arrange
-        downloader = YfinanceStockDownloader()
-        downloader.yf = mock_yf
-        mock_yf.Ticker.return_value = mock_yfinance_ticker
+        symbol = "AAPL"
+        exchange = Exchange.NASDAQ
+        interval = Interval.DAILY
         
-        request = DownloadRequest(
-            symbol="AAPL",
-            exchange=Exchange.NYSE,
-            start_date=datetime(2023, 1, 1),
-            end_date=datetime(2023, 12, 31),
-            interval=Interval.HOUR
+        # Act
+        result = self.downloader._convert_yf_data_to_vnpy(
+            mock_yfinance_data, symbol, exchange, interval
         )
         
+        # Assert
+        assert len(result) == 3
+        assert all(isinstance(bar, BarData) for bar in result)
+        
+        # 检查第一个BarData的属性
+        first_bar = result[0]
+        assert first_bar.symbol == symbol
+        assert first_bar.exchange == exchange
+        assert first_bar.interval == interval
+        assert first_bar.open_price == 150.0
+        assert first_bar.high_price == 155.0
+        assert first_bar.low_price == 149.0
+        assert first_bar.close_price == 154.0
+        assert first_bar.volume == 1000000.0
+        assert first_bar.gateway_name == "yfinance"
+
+    def test_convert_yf_data_to_vnpy_with_empty_data_should_return_empty_list(self, mock_yfinance_empty_data):
+        """测试空数据转换应该返回空列表"""
+        # Arrange
+        symbol = "AAPL"
+        exchange = Exchange.NASDAQ
+        interval = Interval.DAILY
+        
         # Act
-        result = downloader.download_bars(request)
+        result = self.downloader._convert_yf_data_to_vnpy(
+            mock_yfinance_empty_data, symbol, exchange, interval
+        )
         
         # Assert
-        mock_yfinance_ticker.history.assert_called_once_with(
-            start=request.start_date,
-            end=request.end_date,
-            interval="1h",
+        assert result == []
+
+    def test_convert_yf_data_to_vnpy_with_none_data_should_return_empty_list(self):
+        """测试None数据转换应该返回空列表"""
+        # Arrange
+        symbol = "AAPL"
+        exchange = Exchange.NASDAQ
+        interval = Interval.DAILY
+        
+        # Act
+        result = self.downloader._convert_yf_data_to_vnpy(
+            None, symbol, exchange, interval
+        )
+        
+        # Assert
+        assert result == []
+
+    def test_download_bars_with_valid_request_should_return_success_result(self, sample_download_request, mock_yfinance_data):
+        """测试有效请求下载K线数据应该返回成功结果"""
+        # Arrange
+        mock_yf = Mock()
+        mock_ticker = Mock()
+        mock_ticker.history.return_value = mock_yfinance_data
+        mock_yf.Ticker.return_value = mock_ticker
+        self.downloader.yf = mock_yf
+        
+        # Act
+        result = self.downloader.download_bars(sample_download_request)
+        
+        # Assert
+        assert isinstance(result, DownloadResult)
+        assert result.success is True
+        assert len(result.bars) == 3
+        assert result.error_msg == ""
+        assert result.request == sample_download_request
+        
+        # 验证yfinance调用
+        mock_yf.Ticker.assert_called_once_with("AAPL")
+        mock_ticker.history.assert_called_once_with(
+            start=sample_download_request.start_date,
+            end=sample_download_request.end_date,
+            interval="1d",
             auto_adjust=True,
             prepost=False,
             actions=False
-        ) 
+        )
+
+    def test_download_bars_with_invalid_request_should_return_failure_result(self):
+        """测试无效请求下载K线数据应该返回失败结果"""
+        # Arrange
+        invalid_request = DownloadRequest(
+            symbol="",  # 空的股票代码
+            exchange=Exchange.NASDAQ,
+            interval=Interval.DAILY
+        )
+        
+        # Act
+        result = self.downloader.download_bars(invalid_request)
+        
+        # Assert
+        assert isinstance(result, DownloadResult)
+        assert result.success is False
+        assert result.bars == []
+        assert "股票代码不能为空" in result.error_msg
+
+    def test_download_bars_without_yfinance_initialized_should_return_failure_result(self, sample_download_request):
+        """测试未初始化yfinance时下载K线数据应该返回失败结果"""
+        # Arrange - yf is None by default
+        
+        # Act
+        result = self.downloader.download_bars(sample_download_request)
+        
+        # Assert
+        assert isinstance(result, DownloadResult)
+        assert result.success is False
+        assert result.bars == []
+        assert "yfinance未初始化" in result.error_msg
+
+    def test_download_bars_with_yfinance_exception_should_return_failure_result(self, sample_download_request):
+        """测试yfinance抛出异常时下载K线数据应该返回失败结果"""
+        # Arrange
+        mock_yf = Mock()
+        mock_yf.Ticker.side_effect = Exception("Network error")
+        self.downloader.yf = mock_yf
+        
+        # Act
+        result = self.downloader.download_bars(sample_download_request)
+        
+        # Assert
+        assert isinstance(result, DownloadResult)
+        assert result.success is False
+        assert result.bars == []
+        assert "yfinance数据下载失败" in result.error_msg
+        assert "Network error" in result.error_msg
+
+    def test_download_bars_with_empty_data_should_return_failure_result(self, sample_download_request, mock_yfinance_empty_data):
+        """测试下载到空数据时应该返回失败结果"""
+        # Arrange
+        mock_yf = Mock()
+        mock_ticker = Mock()
+        mock_ticker.history.return_value = mock_yfinance_empty_data
+        mock_yf.Ticker.return_value = mock_ticker
+        self.downloader.yf = mock_yf
+        
+        # Act
+        result = self.downloader.download_bars(sample_download_request)
+        
+        # Assert
+        assert isinstance(result, DownloadResult)
+        assert result.success is False
+        assert result.bars == []
+        assert "未获取到数据或股票代码不存在" in result.error_msg
+
+    def test_get_supported_intervals_should_return_correct_intervals(self):
+        """测试获取支持的时间间隔应该返回正确的间隔列表"""
+        # Act
+        result = self.downloader.get_supported_intervals()
+        
+        # Assert
+        expected = [Interval.MINUTE, Interval.HOUR, Interval.DAILY]
+        assert result == expected
+
+    @pytest.mark.parametrize("interval,expected", [
+        (Interval.MINUTE, True),
+        (Interval.HOUR, True),
+        (Interval.DAILY, True),
+    ])
+    def test_is_support_interval_with_supported_intervals_should_return_true(self, interval, expected):
+        """测试支持的时间间隔检查应该返回True"""
+        # Act
+        result = self.downloader.is_support_interval(interval)
+        
+        # Assert
+        assert result == expected
+
+    def test_is_support_interval_with_unsupported_interval_should_return_false(self):
+        """测试不支持的时间间隔检查应该返回False"""
+        # Arrange
+        unsupported_interval = Mock()
+        
+        # Act
+        result = self.downloader.is_support_interval(unsupported_interval)
+        
+        # Assert
+        assert result is False
+
+    def test_get_supported_exchanges_should_return_correct_exchanges(self):
+        """测试获取支持的交易所应该返回正确的交易所列表"""
+        # Act
+        result = self.downloader.get_supported_exchanges()
+        
+        # Assert
+        expected = [Exchange.NYSE, Exchange.NASDAQ, Exchange.AMEX, Exchange.SMART]
+        assert result == expected
+
+
+class TestYfinanceDataConversion:
+    """yfinance数据转换测试类"""
+
+    def setup_method(self):
+        """每个测试方法执行前的准备工作"""
+        self.downloader = YfinanceStockDownloader()
+
+    def test_convert_yf_data_with_timezone_naive_timestamps_should_handle_correctly(self):
+        """测试处理无时区信息的时间戳应该正确处理"""
+        # Arrange
+        data = {
+            'Open': [150.0],
+            'High': [155.0],
+            'Low': [149.0],
+            'Close': [154.0],
+            'Volume': [1000000]
+        }
+        
+        # 创建无时区的时间索引
+        dates = pd.date_range(start='2023-01-01', periods=1, freq='D')  # 默认无时区
+        df = pd.DataFrame(data, index=dates)
+        
+        # Act
+        result = self.downloader._convert_yf_data_to_vnpy(
+            df, "AAPL", Exchange.NASDAQ, Interval.DAILY
+        )
+        
+        # Assert
+        assert len(result) == 1
+        assert isinstance(result[0], BarData)
+        assert result[0].datetime is not None
+
+    def test_convert_yf_data_with_missing_columns_should_handle_gracefully(self):
+        """测试处理缺失列的数据应该优雅处理"""
+        # Arrange - 创建只有部分列的数据
+        data = {
+            'Open': [150.0],
+            'Close': [154.0],
+            # 缺少 High, Low, Volume
+        }
+        
+        dates = pd.date_range(
+            start='2023-01-01',
+            periods=1,
+            freq='D',
+            tz='America/New_York'
+        )
+        df = pd.DataFrame(data, index=dates)
+        
+        # Act
+        result = self.downloader._convert_yf_data_to_vnpy(
+            df, "AAPL", Exchange.NASDAQ, Interval.DAILY
+        )
+        
+        # Assert
+        assert len(result) == 1
+        bar = result[0]
+        assert bar.open_price == 150.0
+        assert bar.close_price == 154.0
+        assert bar.high_price == 0.0  # 默认值
+        assert bar.low_price == 0.0   # 默认值
+        assert bar.volume == 0.0      # 默认值
+
+
+class TestYfinanceIntegration:
+    """yfinance集成测试类"""
+
+    def setup_method(self):
+        """每个测试方法执行前的准备工作"""
+        self.downloader = YfinanceStockDownloader()
+
+    def test_full_workflow_download_bars_should_work_correctly(self, sample_download_request, mock_yfinance_data):
+        """测试完整的下载工作流程应该正确工作"""
+        # Arrange
+        mock_yf_module = Mock()
+        mock_ticker = Mock()
+        mock_ticker.history.return_value = mock_yfinance_data
+        mock_yf_module.Ticker.return_value = mock_ticker
+        
+        # Act & Assert
+        with patch.dict('sys.modules', {'yfinance': mock_yf_module}):
+            # 1. 初始化连接
+            init_result = self.downloader.init_connection()
+            
+            # 2. 下载数据
+            download_result = self.downloader.download_bars(sample_download_request)
+            
+            # Assert
+            assert init_result is True
+            assert download_result.success is True
+            assert len(download_result.bars) == 3
+            assert all(isinstance(bar, BarData) for bar in download_result.bars)
+
+    def test_validate_request_inheritance_should_work_correctly(self):
+        """测试继承的请求验证功能应该正确工作"""
+        # Arrange
+        invalid_request = DownloadRequest(
+            symbol="AAPL",
+            exchange=Exchange.SSE,  # 不支持的交易所
+            interval=Interval.DAILY
+        )
+        
+        # Act
+        is_valid, error_msg = self.downloader.validate_request(invalid_request)
+        
+        # Assert
+        assert is_valid is False
+        assert "不支持的交易所" in error_msg
+
+    def test_str_representation_should_return_correct_format(self):
+        """测试字符串表示应该返回正确格式"""
+        # Act
+        result = str(self.downloader)
+        
+        # Assert
+        assert result == "YfinanceStockDownloader(DataSource.YFINANCE)"
+
+
+# 异常场景测试
+class TestYfinanceExceptionScenarios:
+    """yfinance异常场景测试类"""
+
+    def setup_method(self):
+        """每个测试方法执行前的准备工作"""
+        self.downloader = YfinanceStockDownloader()
+
+    def test_download_bars_with_network_timeout_should_handle_gracefully(self, sample_download_request):
+        """测试网络超时时下载K线数据应该优雅处理"""
+        # Arrange
+        mock_yf = Mock()
+        mock_ticker = Mock()
+        mock_ticker.history.side_effect = TimeoutError("Request timeout")
+        mock_yf.Ticker.return_value = mock_ticker
+        self.downloader.yf = mock_yf
+        
+        # Act
+        result = self.downloader.download_bars(sample_download_request)
+        
+        # Assert
+        assert result.success is False
+        assert "Request timeout" in result.error_msg
+
+    def test_download_bars_with_invalid_symbol_format_should_handle_gracefully(self, sample_download_request):
+        """测试无效股票代码格式时下载K线数据应该优雅处理"""
+        # Arrange
+        mock_yf = Mock()
+        mock_ticker = Mock()
+        mock_ticker.history.side_effect = ValueError("Invalid symbol format")
+        mock_yf.Ticker.return_value = mock_ticker
+        self.downloader.yf = mock_yf
+        
+        # Act
+        result = self.downloader.download_bars(sample_download_request)
+        
+        # Assert
+        assert result.success is False
+        assert "Invalid symbol format" in result.error_msg 
